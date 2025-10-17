@@ -202,7 +202,7 @@ if (
     st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
     st.session_state.last_asked = question
     st.session_state.last_q_prompt = q_prompt
-    st.experimental_rerun()
+    
 
 elif question and df.empty:
     st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
