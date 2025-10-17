@@ -105,7 +105,7 @@ st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
     <p>Upload PDF/DOCX resumes. Get best-match recommendations.<br>
-    Ask follow-up Qs in chat mode. <strong>Instant answer, box always clears!</strong></p>
+    Ask follow-up questions in chat mode. <strong>Instant answer, box always clears, no lag!</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -168,15 +168,9 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-st.markdown("## 🤔 HR Follow-up Q&A (Chat Mode, One Click Ask)")
-
 df = st.session_state["df"]
 
-if st.session_state.qa_history:
-    st.markdown("### 💬 Your Q&A History")
-    for i, (q, a) in enumerate(st.session_state.qa_history):
-        st.markdown(f"**Q{i+1}:** {q}")
-        st.markdown(f"> **A{i+1}:** {a}")
+st.markdown("## 🤔 HR Follow-up Q&A (Chat Mode - Instant)")
 
 with st.form("chatbox_form", clear_on_submit=True):
     question = st.text_input("Type your HR question…", key="chatbox_input", autocomplete="off")
@@ -189,11 +183,7 @@ with st.form("chatbox_form", clear_on_submit=True):
                 for _, row in df.iterrows()
             )
             q_prompt = (
-                "You are a professional HR assistant helping a hiring manager. "
-                "Below are AI-generated analyses of multiple candidates for the same job. "
-                "Use all this analysis to answer the question at the end. "
-                "Base your answer only on what is present in the analyses. "
-                "If information isn't available, say so concisely.\n\n"
+                "The informations are given below....\n\n"
                 f"{analyses_context}\n\n"
                 f"---\n\nQuestion: {question}\nHR Assistant's answer:"
             )
@@ -205,6 +195,12 @@ with st.form("chatbox_form", clear_on_submit=True):
             st.warning("Please enter a question to ask.")
         elif df.empty:
             st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
+
+if st.session_state.qa_history:
+    st.markdown("### 💬 Your Q&A History")
+    for i, (q, a) in enumerate(st.session_state.qa_history):
+        st.markdown(f"**Q{i+1}:** {q}")
+        st.markdown(f"> **A{i+1}:** {a}")
 
 if st.session_state.qa_history and "last_q_prompt" in st.session_state:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
