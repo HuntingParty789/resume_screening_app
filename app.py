@@ -105,7 +105,7 @@ st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
     <p>Upload PDF/DOCX resumes. Get best-match recommendations.<br>
-    Type ANY follow-up Q and get instant answers. (Box doesn't clear; you can clear it manually.)</p>
+    Type follow-up questions and see chat history instantly. Box doesn't auto-clear.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -113,6 +113,8 @@ if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
 if "qa_history" not in st.session_state:
     st.session_state.qa_history = []
+if "last_q_prompt" not in st.session_state:
+    st.session_state["last_q_prompt"] = ""
 
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
@@ -146,6 +148,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
     df = pd.DataFrame(results)
     st.session_state["df"] = df
     st.session_state.qa_history = []
+    st.session_state["last_q_prompt"] = ""
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -178,7 +181,6 @@ if st.session_state.qa_history:
 question = st.text_input("Type your HR question and press Enter...", value="", key="auto_chat", autocomplete="off")
 MAX_LEN = 700
 
-# Only add Q/A if box is new and not duplicate
 if question.strip() and not df.empty:
     if (
         not st.session_state.qa_history
@@ -195,13 +197,15 @@ if question.strip() and not df.empty:
         )
         reply = call_llm(q_prompt)
         st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
+        st.session_state["last_q_prompt"] = q_prompt
 
 elif question and df.empty:
     st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
-if st.session_state.qa_history:
+# Debug block: ONLY show q_prompt if available
+if st.session_state.qa_history and st.session_state["last_q_prompt"]:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
-        st.code(q_prompt, language="markdown")
+        st.code(st.session_state["last_q_prompt"], language="markdown")
 
 st.markdown("---")
 if not st.session_state["df"].empty:
