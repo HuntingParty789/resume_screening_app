@@ -11,7 +11,7 @@ def call_llm(prompt):
         return ""
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     data = {
-        "model": "groq/compound-mini",  # Change to your model if needed
+        "model": "llama-3.1-8b-instant",  # Change to your model if needed
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 600
     }
