@@ -4,3 +4,4 @@ docx2txt
 spacy
 requests
 python-dotenv
+tabulate
