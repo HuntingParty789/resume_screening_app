@@ -12,6 +12,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
+# --- LLM Helper ---
 def call_llm(prompt):
     if not GROQ_API_KEY:
         st.error("Groq API key missing. Set GROQ_API_KEY!")
@@ -52,8 +53,9 @@ score: [0-100]
 Strengths: [2-3 key strengths]
 Weaknesses: [1-2 areas for improvement]
 Recommendation: [One clear sentence: Should we hire/interview/pass and why?]
-Be specific, professional, and focus on job-relevant qualifications. Ensure your score reflects the overall fit."""
+"""
 
+# --- Resume Parsing Helpers ---
 def parse_pdf(file_bytes):
     try:
         reader = PyPDF2.PdfReader(file_bytes)
@@ -82,6 +84,7 @@ def parse_resume(filename, fileobj):
     else:
         return "❌ Unsupported file type. Please upload PDF or DOCX files."
 
+# --- UI Styling ---
 st.set_page_config(page_title="AI Resume Screening Tool", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -89,7 +92,7 @@ st.markdown("""
 .main-header { text-align: center; margin: 0 0 2em 0; }
 .candidate-card {
     background: #fff;
-    color: #333 !important;
+    color: #222 !important;
     padding: 2rem;
     border-radius: 15px;
     border-left: 8px solid #667eea;
@@ -97,29 +100,29 @@ st.markdown("""
     font-size: 1.1em;
     box-shadow: 0 2px 16px rgba(70,78,105,.05);
 }
-.candidate-card strong {
-    color: #222;
-}
+.candidate-card strong { color: #222; }
+.stTextInput label, .stTextArea label { font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
-    <p>Upload resumes, get best-fit recommendations with confidence levels, and ask HR follow-up questions!</p>
+    <p>Upload PDF/DOCX resumes. Get instant best-match recommendations with confidence levels. Ask HR follow-up questions!</p>
 </div>
 """, unsafe_allow_html=True)
 
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
+results = []
 
 if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.strip())):
-    results = []
+    # Parse and analyze all uploaded resumes
     for file in uploaded_files:
         text = parse_resume(file.name, file)
         prompt = build_candidate_prompt(job_desc, text)
         llm_result = call_llm(prompt)
-        score_match = re.search(r"score\s*[:=\-]*\s*(\d+)", llm_result, re.I)
+        score_match = re.search(r"score\s*[:=\-]*\s*(\d+)", llm_result or "", re.I)
         score = int(score_match.group(1)) if score_match else 0
         confidence, badge_type = score_to_confidence(score)
         strengths = weaknesses = recommendation = ""
@@ -139,40 +142,49 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
             "Raw": llm_result
         })
 
-    # Best candidate (highest confidence/score)
     df = pd.DataFrame(results)
-    best_index = df['Score'].astype(int).idxmax()
-    best_row = df.iloc[best_index]
+    if df.empty or df.Score.max() == 0:
+        st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
+    else:
+        best_index = df['Score'].astype(int).idxmax()
+        best_row = df.iloc[best_index]
+        st.markdown("## 🏆 Top Candidate Recommendation")
+        st.markdown(f"""
+            <div class="candidate-card">
+            <h3>📄 {best_row['Filename']}</h3>
+            <p><strong>Confidence Level:</strong> {best_row['Confidence']}</p>
+            <p><strong>💪 Strengths:</strong><br>{best_row['Strengths']}</p>
+            <p><strong>⚠️ Weaknesses:</strong><br>{best_row['Weaknesses']}</p>
+            <p><strong>🎯 Recommendation:</strong><br>{best_row['Recommendation']}</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("## 🏆 Top Candidate Recommendation")
-    st.markdown(f"""
-        <div class="candidate-card">
-        <h3>📄 {best_row['Filename']}</h3>
-        <p><strong>Confidence Level:</strong> {best_row['Confidence']}</p>
-        <p><strong>💪 Strengths:</strong><br>{best_row['Strengths']}</p>
-        <p><strong>⚠️ Weaknesses:</strong><br>{best_row['Weaknesses']}</p>
-        <p><strong>🎯 Recommendation:</strong><br>{best_row['Recommendation']}</p>
-        </div>
-    """, unsafe_allow_html=True)
+        st.markdown("## 📊 All Candidates")
+        st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], use_container_width=True)
 
-    st.markdown("## 📊 All Candidates")
-    st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], use_container_width=True)
+        # --- Q&A ---
+        st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates")
+        followup = st.text_input("Type your HR query here...", "")
+        if followup:
+            # Pass at most 3 analyses, each truncated for token efficiency
+            MAX_CANDIDATES_QA = 3
+            MAX_ANALYSIS_LENGTH = 700
+            results_to_pass = df.sort_values("Score", ascending=False).head(MAX_CANDIDATES_QA)
+            context = "\n\n".join(
+                f"Candidate: {row['Filename']}\n{str(row['Raw'])[:MAX_ANALYSIS_LENGTH]}"
+                for _, row in results_to_pass.iterrows()
+            )
+            q_prompt = f"""You are HR assistant. Based on these analyses:\n{context}\n\nAnswer this HR question:\n{followup}\nYour response:"""
+            reply = call_llm(q_prompt)
+            if reply:
+                st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
+            else:
+                st.error("No answer returned. Try a shorter question or fewer resumes.")
 
-    # HR follow-up Q&A section
-    st.markdown("## 🤔 Ask a Follow-up about These Candidates")
-    followup = st.text_input("Type your HR query here and press Enter...", "")
-    if followup:
-        # Build context from all analyses
-        context = "\n\n".join(
-            f"Candidate: {r['Filename']}\n{r['Raw']}" for _, r in df.iterrows()
-        )
-        q_prompt = f"""You are an HR assistant. Given these analyses of candidates:\n\n{context}\n\nNow answer this question clearly and concisely for an HR manager:\n{followup}\n\nYour response:"""
-        reply = call_llm(q_prompt)
-        st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
+        st.markdown("---")
+        csv = df.drop(columns=["Raw"]).to_csv(index=False)
+        st.download_button("📥 Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
 
-    st.markdown("---")
-    csv = df.drop(columns=["Raw"]).to_csv(index=False)
-    st.download_button("📥 Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
 else:
     st.info("Paste the job description, upload resumes, and click 'Analyze Resumes'.")
 
