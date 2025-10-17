@@ -6,7 +6,7 @@ def parse_pdf(file_path):
     try:
         with open(file_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            text = " ".join(page.extract_text() or "" for page in reader.pages)
+            text = " ".join([page.extract_text() or "" for page in reader.pages])
         return text.strip()
     except Exception as e:
         return f"ERROR parsing PDF: {e}"
@@ -23,7 +23,7 @@ def parse_resume(file_path):
     elif file_path.endswith(".docx"):
         return parse_docx(file_path)
     else:
-        return "Unsupported file type"
+        return ""  # Unsupported format
 
 def batch_parse_resumes(folder):
     resumes = []
