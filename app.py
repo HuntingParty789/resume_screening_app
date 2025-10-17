@@ -172,11 +172,7 @@ if followup and not df.empty:
         for _, row in df.iterrows()
     )
     q_prompt = (
-        "You are a professional HR assistant helping a hiring manager. "
-        "Below are AI-generated analyses of multiple candidates for the same job. "
-        "Use all this analysis to answer the question at the end. "
-        "Base your answer only on what is present in the analyses. "
-        "If information isn't available, say so concisely.\n\n"
+        "The informations are given below....\n\n"
         f"{analyses_context}\n\n"
         f"---\n\nQuestion: {followup}\nHR Assistant's answer:"
     )
