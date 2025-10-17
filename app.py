@@ -105,7 +105,7 @@ st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
     <p>Upload PDF/DOCX resumes. Get best-match recommendations.<br>
-    Ask follow-up Qs using chat. <strong>Chat input always clears and answers show instantly!</strong></p>
+    Ask follow-up Qs in chat mode. <strong>Instant answer, box always clears!</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -113,6 +113,8 @@ if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
 if "qa_history" not in st.session_state:
     st.session_state.qa_history = []
+if "last_q_prompt" not in st.session_state:
+    st.session_state["last_q_prompt"] = ""
 
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
@@ -146,6 +148,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
     df = pd.DataFrame(results)
     st.session_state["df"] = df
     st.session_state.qa_history = []
+    st.session_state["last_q_prompt"] = ""
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -165,8 +168,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-# --------- CHAT Q&A WITH INSTANT ANSWER AND INSTANT CLEAR ----------
-st.markdown("## 🤔 HR Follow-up Q&A (Instant Chat Mode)")
+st.markdown("## 🤔 HR Follow-up Q&A (Chat Mode, One Click Ask)")
 
 df = st.session_state["df"]
 
@@ -177,27 +179,32 @@ if st.session_state.qa_history:
         st.markdown(f"> **A{i+1}:** {a}")
 
 with st.form("chatbox_form", clear_on_submit=True):
-    question = st.text_input("Type your HR question and press Enter (or click Ask)...", key="chatbox_input", autocomplete="off")
+    question = st.text_input("Type your HR question…", key="chatbox_input", autocomplete="off")
     send = st.form_submit_button("Ask")
-    if send and question and not df.empty:
-        MAX_LEN = 700
-        analyses_context = "\n\n".join(
-            f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
-            for _, row in df.iterrows()
-        )
-        q_prompt = (
-            "The informations are given below....\n\n"
-            f"{analyses_context}\n\n"
-            f"---\n\nQuestion: {question}\nHR Assistant's answer:"
-        )
-        reply = call_llm(q_prompt)
-        st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
-        st.session_state["last_q_prompt"] = q_prompt
+    if send:
+        if question and not df.empty:
+            MAX_LEN = 700
+            analyses_context = "\n\n".join(
+                f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
+                for _, row in df.iterrows()
+            )
+            q_prompt = (
+                "You are a professional HR assistant helping a hiring manager. "
+                "Below are AI-generated analyses of multiple candidates for the same job. "
+                "Use all this analysis to answer the question at the end. "
+                "Base your answer only on what is present in the analyses. "
+                "If information isn't available, say so concisely.\n\n"
+                f"{analyses_context}\n\n"
+                f"---\n\nQuestion: {question}\nHR Assistant's answer:"
+            )
+            reply = call_llm(q_prompt)
+            st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
+            st.session_state["last_q_prompt"] = q_prompt
 
-    elif send and not df.empty and not question:
-        st.warning("Please enter a question to ask.")
-    elif send and df.empty:
-        st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
+        elif not df.empty and not question:
+            st.warning("Please enter a question to ask.")
+        elif df.empty:
+            st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
 if st.session_state.qa_history and "last_q_prompt" in st.session_state:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
