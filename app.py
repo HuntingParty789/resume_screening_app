@@ -183,7 +183,6 @@ if question and not df.empty:
     )
     reply = call_llm(q_prompt)
     st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
-    st.session_state["qa_input"] = ""    # (Clear box on rerun. Not always needed.)
     st.experimental_rerun()
 
 elif question and df.empty:
