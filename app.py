@@ -21,7 +21,7 @@ def call_llm(prompt):
     data = {
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 500
+        "max_tokens": 600
     }
     try:
         response = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=30)
@@ -50,10 +50,11 @@ def build_candidate_prompt(jd, resume_text, skills_found):
         f"Job Description:\n{jd}\n\n"
         f"Candidate Resume Text:\n{resume_text}\n\n"
         f"Extracted skills: {', '.join(skills_found)}\n\n"
-        f"Step 1: Score the candidate's fit (label as 'score:' 0-100)\n"
-        f"Step 2: List strengths (label 'Strengths:')\n"
-        f"Step 3: List weaknesses (label 'Weaknesses:')\n"
-        f"Step 4: One-sentence hiring recommendation."
+        f"Step 1: Score the candidate's fit for the JD (label as 'score:' 0-100).\n"
+        f"Step 2: List strengths (label 'Strengths:').\n"
+        f"Step 3: List weaknesses (label 'Weaknesses:').\n"
+        f"Step 4: Give a 1-sentence recommendation."
+        f"Every output must have a clear 'score:' line. Example: score: 87"
     )
 
 st.set_page_config(page_title="LLM Resume Screening", layout="wide")
@@ -76,8 +77,10 @@ if st.button("Analyze Resumes"):
             llm_result = call_llm(prompt)
             st.write(f"LLM response for {res['filename']}: {llm_result if llm_result else '(BLANK/ERROR)'}")
 
-            score_match = re.search(r"score\s*[:\-]?\s*(\d+)", llm_result or "", re.I)
+            # More robust regex for score!
+            score_match = re.search(r"score\s*[:=\-]*\s*(\d+)", llm_result or "", re.I)
             score = int(score_match.group(1)) if score_match else 0
+            st.write(f"DEBUG: Extracted score for {res['filename']}: {score}, from LLM text: {llm_result[:100]}")
             strengths = weaknesses = ""
             try:
                 if "Strengths:" in (llm_result or ""):
@@ -97,31 +100,37 @@ if st.button("Analyze Resumes"):
             })
 
         df = pd.DataFrame(table_data)
+        st.write("DEBUG: DataFrame after scoring", df)
         st.subheader("Candidate Ranking Table")
         min_score = st.slider("Minimum Score Filter", 0, 100, 0)
         filtered_df = df[df["Score"] >= min_score].sort_values("Score", ascending=False)
-        st.dataframe(filtered_df, use_container_width=True)
-        csv = filtered_df.to_csv(index=False)
-        st.download_button("Download Results (CSV)", csv, file_name="screening_results.csv")
+        if filtered_df.empty:
+            st.warning("No candidates meet the minimum score threshold or scoring failed. Lower the minimum score filter!")
+        else:
+            st.dataframe(filtered_df, use_container_width=True)
+            csv = filtered_df.to_csv(index=False)
+            st.download_button("Download Results (CSV)", csv, file_name="screening_results.csv")
 
-        st.subheader("Candidate Analysis Previews")
-        for _, row in filtered_df.iterrows():
-            with st.expander(f"{row['Filename']} - Analysis"):
-                st.markdown(f"**Skills Found:** {row['Skills Found']}")
-                st.markdown(row['LLM Analysis'])
+            st.subheader("Candidate Analysis Previews")
+            for _, row in filtered_df.iterrows():
+                with st.expander(f"{row['Filename']} - Analysis"):
+                    st.markdown(f"**Skills Found:** {row['Skills Found']}")
+                    st.markdown(row['LLM Analysis'])
 
-        st.success(f"Analysis complete for {len(filtered_df)} candidate(s).")
+            st.success(f"Analysis complete for {len(filtered_df)} candidate(s).")
 
-        st.subheader("Ask about the Candidate Pool")
-        question = st.text_input("Example: 'Who excels at Python?'")
-        if question and not filtered_df.empty:
-            qna_context = "\n".join(
-                f"Resume: {row['Filename']}\n{row['LLM Analysis']}" for _, row in filtered_df.iterrows()
-            )
-            full_prompt = f"Based on the following analyses:\n\n{qna_context}\n\nQuestion: {question}\nAnswer:"
-            with st.spinner("LLM answering your question..."):
-                qna_answer = call_llm(full_prompt)
-            st.markdown(f"**Q&A Result:** {qna_answer}")
+            st.subheader("Ask about the Candidate Pool")
+            question = st.text_input("Example: 'Who excels at Python?'")
+            if question and not filtered_df.empty:
+                qna_context = "\n".join(
+                    f"Resume: {row['Filename']}\n{row['LLM Analysis']}" for _, row in filtered_df.iterrows()
+                )
+                full_prompt = f"Based on the following analyses:\n\n{qna_context}\n\nQuestion: {question}\nAnswer:"
+                with st.spinner("LLM answering your question..."):
+                    qna_answer = call_llm(full_prompt)
+                st.markdown(f"**Q&A Result:** {qna_answer}")
+            elif question:
+                st.warning("No candidates to analyze. Lower the score filter!")
 
 else:
     st.info("Place resumes (PDF/DOCX) in the 'data/resumes/' folder and enter a job description to start analysis.")
