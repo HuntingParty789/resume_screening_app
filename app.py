@@ -108,6 +108,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Session state for results. Set up at top.
+if "df" not in st.session_state:
+    st.session_state["df"] = pd.DataFrame()
+
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
 results = []
@@ -138,6 +142,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         })
 
     df = pd.DataFrame(results)
+    st.session_state["df"] = df
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -157,37 +162,39 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-        # --- Q&A ---
-        st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates")
-        followup = st.text_input("Type your HR query here...", "")
-        if followup:
-            top_candidate = df.sort_values("Score", ascending=False).iloc[0]
-            candidate_structured = (
-                f"Filename: {top_candidate['Filename']}\n"
-                f"Confidence: {top_candidate['Confidence']}\n"
-                f"Strengths: {top_candidate['Strengths']}\n"
-                f"Weaknesses: {top_candidate['Weaknesses']}\n"
-                f"Recommendation: {top_candidate['Recommendation']}"
-            )
-            q_prompt = (
-                f"You are an expert HR assistant.\n"
-                f"Given this candidate summary:\n\n"
-                f"{candidate_structured}\n\n"
-                f"Answer this HR question:\n{followup}\n"
-                f"Give a clear, direct answer for the HR manager."
-            )
-            st.code(q_prompt, language="markdown")
-            reply = call_llm(q_prompt)
-            if reply and reply.strip():
-                st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
-            else:
-                st.error("No answer returned. Try a simpler question, run with fewer resumes, or check API/network configuration.")
+# ----- HR Q&A (always available if analysis already run) -----
+st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates")
+followup = st.text_input("Type your HR query here...", "")
+df = st.session_state["df"]
+if followup and not df.empty:
+    best_index = df['Score'].astype(int).idxmax()
+    best_row = df.iloc[best_index]
+    candidate_structured = (
+        f"Filename: {best_row['Filename']}\n"
+        f"Confidence: {best_row['Confidence']}\n"
+        f"Strengths: {best_row['Strengths']}\n"
+        f"Weaknesses: {best_row['Weaknesses']}\n"
+        f"Recommendation: {best_row['Recommendation']}"
+    )
+    q_prompt = (
+        f"You are an expert HR assistant.\n"
+        f"Given this candidate summary:\n\n"
+        f"{candidate_structured}\n\n"
+        f"Answer this HR question:\n{followup}\n"
+        f"Give a clear, direct answer for the HR manager."
+    )
+    st.code(q_prompt, language="markdown")
+    reply = call_llm(q_prompt)
+    if reply and reply.strip():
+        st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
+    else:
+        st.error("No answer returned. Try a simpler question, run with fewer resumes, or check API/network configuration.")
+elif followup and df.empty:
+    st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
-        st.markdown("---")
-        csv = df.drop(columns=["Raw"]).to_csv(index=False)
-        st.download_button("📥 Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
-
-else:
-    st.info("Paste the job description, upload resumes, and click 'Analyze Resumes'.")
+st.markdown("---")
+if not df.empty:
+    csv = df.drop(columns=["Raw"]).to_csv(index=False)
+    st.download_button("📥 Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
 
 st.caption("LLM-powered screening. For real-world hiring, always review results with a human expert.")
