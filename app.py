@@ -145,7 +145,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
 
     df = pd.DataFrame(results)
     st.session_state["df"] = df
-    st.session_state.qa_history = []       # Clear Q&A on new analysis!
+    st.session_state.qa_history = []  # Reset chat on new analysis
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -165,28 +165,10 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-# ----- Q&A (Chat Mode with History) -----
+# ----- Q&A (Chat Mode with st.form so box is always at the end) -----
 st.markdown("## 🤔 HR Follow-up Q&A (Chat Mode)")
-question = st.text_input("Type your HR question and press Enter...", key="qa_input")
+
 df = st.session_state["df"]
-
-if question and not df.empty:
-    MAX_LEN = 700
-    analyses_context = "\n\n".join(
-        f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
-        for _, row in df.iterrows()
-    )
-    q_prompt = (
-        "The informations are given below....\n\n"
-        f"{analyses_context}\n\n"
-        f"---\n\nQuestion: {question}\nHR Assistant's answer:"
-    )
-    reply = call_llm(q_prompt)
-    st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
-
-
-elif question and df.empty:
-    st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
 if st.session_state.qa_history:
     st.markdown("### 💬 Your Q&A History")
@@ -194,14 +176,35 @@ if st.session_state.qa_history:
         st.markdown(f"**Q{i+1}:** {q}")
         st.markdown(f"> **A{i+1}:** {a}")
 
-# --- Debug/Show LLM Prompt (optional, hide in expander) ---
-if question and not df.empty:
+with st.form("chatbox_form"):
+    question = st.text_input("Type your HR question…", key="chatbox_input")
+    send = st.form_submit_button("Ask")
+    if send and question and not df.empty:
+        MAX_LEN = 700
+        analyses_context = "\n\n".join(
+            f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
+            for _, row in df.iterrows()
+        )
+        q_prompt = (
+            "The informations are given below....\n\n"
+            f"{analyses_context}\n\n"
+            f"---\n\nQuestion: {question}\nHR Assistant's answer:"
+        )
+        reply = call_llm(q_prompt)
+        st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
+        st.success("Answer added to chat!")
+    elif send and not df.empty and not question:
+        st.warning("Please enter a question to ask.")
+    elif send and df.empty:
+        st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
+
+if st.session_state.qa_history:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
         st.code(q_prompt, language="markdown")
 
 st.markdown("---")
-if not df.empty:
-    csv = df.drop(columns=["Raw"]).to_csv(index=False)
+if not st.session_state["df"].empty:
+    csv = st.session_state["df"].drop(columns=["Raw"]).to_csv(index=False)
     st.download_button("📥 Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
 
 st.caption("LLM-powered screening. For real-world hiring, always review results with a human expert.")
