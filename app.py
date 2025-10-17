@@ -5,14 +5,13 @@ import streamlit as st
 import requests
 from parsing.resume_parser import batch_parse_resumes
 
-# Setup Groq config (replace with active Groq model as needed)
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_MODEL = "openai/gpt-oss-120b"  # Use a valid Groq model
 
 def call_llm(prompt):
     if not GROQ_API_KEY:
-        st.error("Groq API key missing. Set GROQ_API_KEY as environment variable or .env.")
+        st.error("Groq API key missing. Set GROQ_API_KEY!")
         return ""
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -26,113 +25,70 @@ def call_llm(prompt):
     try:
         response = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=30)
         if not response.ok:
-            st.error(f"Groq API error {response.status_code}:\n{response.text}")
+            st.error(f"Groq API error {response.status_code}: {response.text}")
             return ""
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
         st.error(f"LLM call failed: {e}")
         return ""
 
-def parse_job_description(jd_text):
-    return jd_text.strip()
-
-def extract_skills(text, skill_keywords):
-    present = [kw for kw in skill_keywords if kw.lower() in text.lower()]
-    return present
-
-SKILL_KEYWORDS = [
-    "python","flask","fastapi","genai","llm","docker",
-    "aws","azure","langchain","c++","sql","huggingface","rag"
-]
-
-def build_candidate_prompt(jd, resume_text, skills_found):
+def build_candidate_prompt(jd, resume_text):
     return (
+        f"You are an expert HR AI assistant.\n"
         f"Job Description:\n{jd}\n\n"
-        f"Candidate Resume Text:\n{resume_text}\n\n"
-        f"Extracted skills: {', '.join(skills_found)}\n\n"
-        f"Step 1: Score the candidate's fit for the JD (label as 'score:' 0-100).\n"
-        f"Step 2: List strengths (label 'Strengths:').\n"
-        f"Step 3: List weaknesses (label 'Weaknesses:').\n"
-        f"Step 4: Give a 1-sentence recommendation."
-        f"Every output must have a clear 'score:' line. Example: score: 87"
+        f"Candidate Resume:\n{resume_text}\n\n"
+        f"Assess: 1) Candidate fit score for this JD (label as 'score:' 0-100, higher=better), "
+        f"2) Strengths (label 'Strengths:'), "
+        f"3) Weaknesses (label 'Weaknesses:'), "
+        f"4) Clear, short hiring recommendation (label 'Recommendation:')."
+        f"Output in this format: score: xx Strengths: ... Weaknesses: ... Recommendation: ..."
     )
 
-st.set_page_config(page_title="LLM Resume Screening", layout="wide")
-st.title("LLM-Powered Advanced Candidate Screening App")
+st.title("Best-fit HR LLM Candidate Recommendations")
 
-job_desc = st.text_area("Enter the job description:", height=120)
-
+job_desc = st.text_area("Paste your job description", height=140)
 if st.button("Analyze Resumes"):
     resumes = batch_parse_resumes("data/resumes/")
-    st.write("DEBUG: parsed resumes", resumes)
     if not resumes:
-        st.warning("No resumes found or parsing failed.")
+        st.warning("No PDF/DOCX resumes found in 'data/resumes/'.")
     else:
-        table_data = []
+        results = []
         for res in resumes:
-            skills_found = extract_skills(res['text'], SKILL_KEYWORDS)
-            st.info(f"Processing {res['filename']} - Found skills: {', '.join(skills_found) if skills_found else '(none)'}")
-            prompt = build_candidate_prompt(job_desc, res['text'], skills_found)
-            st.write(f"DEBUG: LLM prompt for {res['filename']}", prompt)
+            prompt = build_candidate_prompt(job_desc, res['text'])
             llm_result = call_llm(prompt)
-            st.write(f"LLM response for {res['filename']}: {llm_result if llm_result else '(BLANK/ERROR)'}")
-
-            # More robust regex for score!
             score_match = re.search(r"score\s*[:=\-]*\s*(\d+)", llm_result or "", re.I)
             score = int(score_match.group(1)) if score_match else 0
-            st.write(f"DEBUG: Extracted score for {res['filename']}: {score}, from LLM text: {llm_result[:100]}")
-            strengths = weaknesses = ""
+            strengths, weaknesses, recommendation = "", "", ""
             try:
-                if "Strengths:" in (llm_result or ""):
-                    strengths = llm_result.split("Strengths:")[1].split("Weaknesses:")[0].strip()
-                if "Weaknesses:" in (llm_result or ""):
-                    weaknesses = llm_result.split("Weaknesses:")[1].splitlines()[0].strip()
-            except Exception as e:
-                st.write(f"DEBUG: Strength/weakness parse error for {res['filename']} - {e}")
-
-            table_data.append({
+                strengths = re.search(r"Strengths:\s*(.*?)(Weaknesses:|Recommendation:|$)", llm_result, re.S).group(1).strip()
+                weaknesses = re.search(r"Weaknesses:\s*(.*?)(Recommendation:|$)", llm_result, re.S).group(1).strip()
+                recommendation = re.search(r"Recommendation:\s*(.*)", llm_result, re.S).group(1).strip()
+            except Exception:
+                pass
+            results.append({
                 "Filename": res['filename'],
                 "Score": score,
-                "Skills Found": ", ".join(skills_found),
                 "Strengths": strengths,
                 "Weaknesses": weaknesses,
-                "LLM Analysis": llm_result
+                "Recommendation": recommendation
             })
 
-        df = pd.DataFrame(table_data)
-        st.write("DEBUG: DataFrame after scoring", df)
-        st.subheader("Candidate Ranking Table")
-        min_score = st.slider("Minimum Score Filter", 0, 100, 0)
-        filtered_df = df[df["Score"] >= min_score].sort_values("Score", ascending=False)
-        if filtered_df.empty:
-            st.warning("No candidates meet the minimum score threshold or scoring failed. Lower the minimum score filter!")
-        else:
-            st.dataframe(filtered_df, use_container_width=True)
-            csv = filtered_df.to_csv(index=False)
-            st.download_button("Download Results (CSV)", csv, file_name="screening_results.csv")
+        df = pd.DataFrame(results)
+        top_df = df.sort_values("Score", ascending=False).head(1)
+        st.header("Most Suitable Candidate Recommendation")
+        for _, row in top_df.iterrows():
+            st.subheader(row['Filename'])
+            st.markdown(f"**Fit Score:** {row['Score']}")
+            st.markdown(f"**Strengths:** {row['Strengths']}")
+            st.markdown(f"**Weaknesses:** {row['Weaknesses']}")
+            st.markdown(f"**Recommendation:** {row['Recommendation']}")
 
-            st.subheader("Candidate Analysis Previews")
-            for _, row in filtered_df.iterrows():
-                with st.expander(f"{row['Filename']} - Analysis"):
-                    st.markdown(f"**Skills Found:** {row['Skills Found']}")
-                    st.markdown(row['LLM Analysis'])
-
-            st.success(f"Analysis complete for {len(filtered_df)} candidate(s).")
-
-            st.subheader("Ask about the Candidate Pool")
-            question = st.text_input("Example: 'Who excels at Python?'")
-            if question and not filtered_df.empty:
-                qna_context = "\n".join(
-                    f"Resume: {row['Filename']}\n{row['LLM Analysis']}" for _, row in filtered_df.iterrows()
-                )
-                full_prompt = f"Based on the following analyses:\n\n{qna_context}\n\nQuestion: {question}\nAnswer:"
-                with st.spinner("LLM answering your question..."):
-                    qna_answer = call_llm(full_prompt)
-                st.markdown(f"**Q&A Result:** {qna_answer}")
-            elif question:
-                st.warning("No candidates to analyze. Lower the score filter!")
+        st.header("All Candidates Ranked")
+        st.dataframe(df.sort_values("Score", ascending=False), use_container_width=True)
+        csv = df.to_csv(index=False)
+        st.download_button("Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
 
 else:
-    st.info("Place resumes (PDF/DOCX) in the 'data/resumes/' folder and enter a job description to start analysis.")
+    st.info("Paste a job description, add resumes, and click 'Analyze Resumes'.")
 
-st.caption("Powered by Groq LLM. Results may vary by prompt, skills, and LLM model.")
+st.caption("LLM-powered candidate recommendations (fit score, strengths, weaknesses, clear hiring advice).")
