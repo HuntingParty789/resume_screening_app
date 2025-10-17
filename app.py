@@ -196,11 +196,20 @@ with st.form("chatbox_form", clear_on_submit=True):
         elif df.empty:
             st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
+# Show the latest answer just below the Q&A box
 if st.session_state.qa_history:
-    st.markdown("### 💬 Your Q&A History")
-    for i, (q, a) in enumerate(st.session_state.qa_history):
-        st.markdown(f"**Q{i+1}:** {q}")
-        st.markdown(f"> **A{i+1}:** {a}")
+    last_q, last_a = st.session_state.qa_history[-1]
+    st.markdown("### 🆕 Latest Q&A")
+    st.markdown(f"**Q:** {last_q}")
+    st.markdown(f"> **A:** {last_a}")
+
+# Show the previous Q&A history (if any) below that
+if len(st.session_state.qa_history) > 1:
+    st.markdown("### 💬 Earlier Q&A History")
+    for i, (q, a) in enumerate(st.session_state.qa_history[:-1], 1):
+        st.markdown(f"**Q{i}:** {q}")
+        st.markdown(f"> **A{i}:** {a}")
+
 
 if st.session_state.qa_history and "last_q_prompt" in st.session_state:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
