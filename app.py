@@ -15,6 +15,8 @@ job_desc = st.text_area("Enter the job description:", height=150)
 
 if st.button("Analyze Resumes"):
     resumes = batch_parse_resumes("data/resumes/")
+    st.write("DEBUG: parsed resumes", resumes)  # Show loaded resumes
+
     if not resumes:
         st.warning("No resumes found or parsing failed. Please check the 'data/resumes/' folder and file formats.")
     else:
@@ -22,21 +24,19 @@ if st.button("Analyze Resumes"):
         results = []
         table_data = []
 
-        st.write("DEBUG: Parsed resumes", resumes)
-
         for res in resumes:
             st.info(f"Processing {res['filename']}")
             prompt = build_candidate_prompt(jd_parsed, res['text'])
-            st.write(f"DEBUG: LLM prompt for {res['filename']}", prompt[:600])  # Show first 600 chars
+            st.write(f"DEBUG: LLM prompt for {res['filename']}", prompt[:500])  # Optional: show prompt
             llm_result = call_llm(prompt)
-            st.write(f"DEBUG: LLM result for {res['filename']}", llm_result[:600])
-            results.append((res['filename'], llm_result, res['text']))
+            st.write(f"DEBUG: LLM result for {res['filename']}", llm_result[:500])
+            results.append((res['filename'], llm_result))
 
-            # Try to extract score, strengths, weaknesses
             score_match = re.search(r"score\s*[:\-]?\s*(\d+)", llm_result, re.I)
             score = int(score_match.group(1)) if score_match else 0
             strengths = ""
             weaknesses = ""
+            # Try extracting strengths/weaknesses if labeled by LLM
             try:
                 if "Strengths:" in llm_result:
                     strengths = llm_result.split("Strengths:")[1].split("Weaknesses:")[0].strip()
@@ -50,14 +50,12 @@ if st.button("Analyze Resumes"):
                 "Score": score,
                 "Strengths": strengths,
                 "Weaknesses": weaknesses,
-                "LLM Result": llm_result,
-                "Resume Text": res['text']
+                "LLM Result": llm_result
             })
 
         df = pd.DataFrame(table_data)
         st.write("DEBUG: Candidate DataFrame", df)
 
-        # Filtering
         min_score = st.slider("Minimum Score Filter", 0, 100, 0)
         filtered_df = df[df["Score"] >= min_score].sort_values("Score", ascending=False)
 
@@ -67,7 +65,6 @@ if st.button("Analyze Resumes"):
             st.subheader("Candidate Ranking Table")
             st.dataframe(filtered_df, use_container_width=True)
 
-            # Downloads
             csv = filtered_df.to_csv(index=False)
             try:
                 md_report = filtered_df.to_markdown(index=False)
@@ -76,29 +73,25 @@ if st.button("Analyze Resumes"):
             st.download_button("Download Results (CSV)", csv, file_name="screening_results.csv")
             st.download_button("Download Results (Markdown)", md_report, file_name="screening_results.md")
 
-            # Resume Previews
-            st.subheader("Resume Previews & LLM Analysis")
+            # Resume Previews — ONLY LLM Analysis, NO raw resume text
+            st.subheader("Candidate LLM Analysis")
             for _, row in filtered_df.iterrows():
-                with st.expander(f"{row['Filename']} - Preview"):
+                with st.expander(f"{row['Filename']} - Analysis"):
                     st.markdown("**LLM analysis:**")
                     st.markdown(row['LLM Result'])
-                    st.markdown("---")
-                    st.markdown("**Parsed Resume:**")
-                    st.markdown(row['Resume Text'][:1500])  # Only show first 1500 chars for brevity
 
             st.success(f"Analysis complete for {len(filtered_df)} candidate(s).")
 
             st.subheader("Ask about the Candidate Pool")
             question = st.text_input("Example: 'Who excels at Python?'")
             if question:
-                if filtered_df.empty:
-                    st.warning("No data for Q&A. Adjust score filter or check resume inputs.")
-                else:
-                    qna_context = "\n".join(f"Resume: {row['Filename']}\n{row['LLM Result']}" for _, row in filtered_df.iterrows())
-                    full_prompt = f"Based on the following analyses:\n\n{qna_context}\n\nQuestion: {question}\nAnswer:"
-                    with st.spinner("LLM answering your question..."):
-                        qna_answer = call_llm(full_prompt)
-                    st.markdown(f"**Q&A Result:** {qna_answer}")
+                qna_context = "\n".join(
+                    f"Resume: {row['Filename']}\n{row['LLM Result']}" for _, row in filtered_df.iterrows()
+                )
+                full_prompt = f"Based on the following analyses:\n\n{qna_context}\n\nQuestion: {question}\nAnswer:"
+                with st.spinner("LLM answering your question..."):
+                    qna_answer = call_llm(full_prompt)
+                st.markdown(f"**Q&A Result:** {qna_answer}")
 
 else:
     st.info("Place resumes (PDF/DOCX) in the 'data/resumes/' folder and enter a job description to start analysis.")
