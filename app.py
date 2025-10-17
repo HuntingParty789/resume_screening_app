@@ -162,19 +162,26 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         followup = st.text_input("Type your HR query here...", "")
         if followup:
             top_candidate = df.sort_values("Score", ascending=False).iloc[0]
-            context = f"Candidate: {top_candidate['Filename']}\n{str(top_candidate['Raw'])[:700]}"
-            q_prompt = (
-                f"You are an HR assistant. Based on this candidate analysis:\n\n"
-                f"{context}\n\n"
-                f"Now answer this question, clearly and professionally:\n{followup}\n\n"
-                f"Your response:"
+            candidate_structured = (
+                f"Filename: {top_candidate['Filename']}\n"
+                f"Confidence: {top_candidate['Confidence']}\n"
+                f"Strengths: {top_candidate['Strengths']}\n"
+                f"Weaknesses: {top_candidate['Weaknesses']}\n"
+                f"Recommendation: {top_candidate['Recommendation']}"
             )
+            q_prompt = (
+                f"You are an expert HR assistant.\n"
+                f"Given this candidate summary:\n\n"
+                f"{candidate_structured}\n\n"
+                f"Answer this HR question:\n{followup}\n"
+                f"Give a clear, direct answer for the HR manager."
+            )
+            st.code(q_prompt, language="markdown")
             reply = call_llm(q_prompt)
             if reply and reply.strip():
                 st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
             else:
-                st.error("No answer returned. Try a simpler, shorter question or analyze fewer resumes.")
-                st.code(q_prompt, language="markdown")  # Show the LLM prompt for debugging
+                st.error("No answer returned. Try a simpler question, run with fewer resumes, or check API/network configuration.")
 
         st.markdown("---")
         csv = df.drop(columns=["Raw"]).to_csv(index=False)
