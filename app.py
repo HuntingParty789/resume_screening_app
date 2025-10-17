@@ -104,8 +104,8 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
-    <p>Upload PDF/DOCX resumes. Get best-match recommendations with confidence levels.<br>
-    Type ANY follow-up Q in the chat box and get instant answers. Box always resets after each question.</p>
+    <p>Upload PDF/DOCX resumes. Get best-match recommendations.<br>
+    Type ANY follow-up Q and get instant answers. (Box doesn't clear; you can clear it manually.)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -113,10 +113,6 @@ if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
 if "qa_history" not in st.session_state:
     st.session_state.qa_history = []
-if "last_asked" not in st.session_state:
-    st.session_state.last_asked = ""
-if "last_q_prompt" not in st.session_state:
-    st.session_state.last_q_prompt = ""
 
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
@@ -150,8 +146,6 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
     df = pd.DataFrame(results)
     st.session_state["df"] = df
     st.session_state.qa_history = []
-    st.session_state.last_asked = ""
-    st.session_state.last_q_prompt = ""
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -171,7 +165,8 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-st.markdown("## 🤔 HR Follow-up Q&A (Automatic Chat Mode)")
+st.markdown("## 🤔 HR Follow-up Q&A (No Button, No Rerun Mode)")
+
 df = st.session_state["df"]
 
 if st.session_state.qa_history:
@@ -180,37 +175,33 @@ if st.session_state.qa_history:
         st.markdown(f"**Q{i+1}:** {q}")
         st.markdown(f"> **A{i+1}:** {a}")
 
-# Input box always available; answers immediately and auto-clears
 question = st.text_input("Type your HR question and press Enter...", value="", key="auto_chat", autocomplete="off")
-
 MAX_LEN = 700
 
-if (
-    question.strip()
-    and question != st.session_state.last_asked
-    and not df.empty
-):
-    analyses_context = "\n\n".join(
-        f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
-        for _, row in df.iterrows()
-    )
-    q_prompt = (
-        "The informations are given below....\n\n"
-        f"{analyses_context}\n\n"
-        f"---\n\nQuestion: {question}\nHR Assistant's answer:"
-    )
-    reply = call_llm(q_prompt)
-    st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
-    st.session_state.last_asked = question
-    st.session_state.last_q_prompt = q_prompt
-    
+# Only add Q/A if box is new and not duplicate
+if question.strip() and not df.empty:
+    if (
+        not st.session_state.qa_history
+        or question != st.session_state.qa_history[-1][0]
+    ):
+        analyses_context = "\n\n".join(
+            f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
+            for _, row in df.iterrows()
+        )
+        q_prompt = (
+            "The informations are given below....\n\n"
+            f"{analyses_context}\n\n"
+            f"---\n\nQuestion: {question}\nHR Assistant's answer:"
+        )
+        reply = call_llm(q_prompt)
+        st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
 
 elif question and df.empty:
     st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
-if st.session_state.qa_history and st.session_state.last_q_prompt:
+if st.session_state.qa_history:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
-        st.code(st.session_state.last_q_prompt, language="markdown")
+        st.code(q_prompt, language="markdown")
 
 st.markdown("---")
 if not st.session_state["df"].empty:
