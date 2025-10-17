@@ -11,7 +11,7 @@ def call_llm(prompt):
         return ""
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     data = {
-        "model": "openai/gpt-oss-120b",  # Change to your model if needed
+        "model": "mixtral-8x7b-32768",  # Change to your model if needed
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 600
     }

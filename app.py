@@ -8,7 +8,7 @@ from parsing.resume_parser import batch_parse_resumes
 # Config Groq (update model if needed)
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_MODEL = "mixtral-8x7b-32768"
 
 def call_llm(prompt):
     if not GROQ_API_KEY:
