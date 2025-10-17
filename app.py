@@ -15,42 +15,43 @@ job_desc = st.text_area("Enter the job description:", height=150)
 
 if st.button("Analyze Resumes"):
     resumes = batch_parse_resumes("data/resumes/")
-    st.write("DEBUG: parsed resumes", resumes)  # Show loaded resumes
+    st.write("DEBUG: parsed resumes", resumes)
 
     if not resumes:
         st.warning("No resumes found or parsing failed. Please check the 'data/resumes/' folder and file formats.")
     else:
         jd_parsed = parse_job_description(job_desc)
-        results = []
         table_data = []
 
         for res in resumes:
             st.info(f"Processing {res['filename']}")
             prompt = build_candidate_prompt(jd_parsed, res['text'])
-            st.write(f"DEBUG: LLM prompt for {res['filename']}", prompt[:500])  # Optional: show prompt
-            llm_result = call_llm(prompt)
-            st.write(f"DEBUG: LLM result for {res['filename']}", llm_result[:500])
-            results.append((res['filename'], llm_result))
+            st.write(f"DEBUG: LLM prompt for {res['filename']}", prompt[:500])  # Optional: show prompt for troubleshooting
 
-            score_match = re.search(r"score\s*[:\-]?\s*(\d+)", llm_result, re.I)
+            llm_result = call_llm(prompt)
+            if not llm_result:
+                st.error(f"LLM failed for {res['filename']}. Check API key/model or try again.")
+
+            st.write(f"DEBUG: LLM result for {res['filename']}", llm_result[:500])
+            score_match = re.search(r"score\s*[:\-]?\s*(\d+)", llm_result or "", re.I)
             score = int(score_match.group(1)) if score_match else 0
             strengths = ""
             weaknesses = ""
-            # Try extracting strengths/weaknesses if labeled by LLM
-            try:
-                if "Strengths:" in llm_result:
-                    strengths = llm_result.split("Strengths:")[1].split("Weaknesses:")[0].strip()
-                if "Weaknesses:" in llm_result:
-                    weaknesses = llm_result.split("Weaknesses:")[1].splitlines()[0].strip()
-            except Exception as e:
-                st.write(f"DEBUG: Strength/weakness parse error for {res['filename']} - {e}")
+            if llm_result:
+                try:
+                    if "Strengths:" in llm_result:
+                        strengths = llm_result.split("Strengths:")[1].split("Weaknesses:")[0].strip()
+                    if "Weaknesses:" in llm_result:
+                        weaknesses = llm_result.split("Weaknesses:")[1].splitlines()[0].strip()
+                except Exception as e:
+                    st.write(f"DEBUG: Strength/weakness parse error for {res['filename']} - {e}")
 
             table_data.append({
                 "Filename": res['filename'],
                 "Score": score,
                 "Strengths": strengths,
                 "Weaknesses": weaknesses,
-                "LLM Result": llm_result
+                "LLM Analysis": llm_result
             })
 
         df = pd.DataFrame(table_data)
@@ -64,29 +65,27 @@ if st.button("Analyze Resumes"):
         else:
             st.subheader("Candidate Ranking Table")
             st.dataframe(filtered_df, use_container_width=True)
-
             csv = filtered_df.to_csv(index=False)
             try:
                 md_report = filtered_df.to_markdown(index=False)
             except Exception:
-                md_report = "tabulate not installed; run 'pip install tabulate' and restart app."
-            st.download_button("Download Results (CSV)", csv, file_name="screening_results.csv")
-            st.download_button("Download Results (Markdown)", md_report, file_name="screening_results.md")
+                md_report = "tabulate not installed; run 'pip install tabulate'."
+            st.download_button("Download CSV", csv, "screening_results.csv")
+            st.download_button("Download Markdown", md_report, "screening_results.md")
 
-            # Resume Previews — ONLY LLM Analysis, NO raw resume text
-            st.subheader("Candidate LLM Analysis")
+            # Previews: Only LLM analysis!
+            st.subheader("Candidate LLM Analysis Previews")
             for _, row in filtered_df.iterrows():
                 with st.expander(f"{row['Filename']} - Analysis"):
-                    st.markdown("**LLM analysis:**")
-                    st.markdown(row['LLM Result'])
+                    st.markdown(row['LLM Analysis'])
 
             st.success(f"Analysis complete for {len(filtered_df)} candidate(s).")
 
             st.subheader("Ask about the Candidate Pool")
             question = st.text_input("Example: 'Who excels at Python?'")
-            if question:
+            if question and not filtered_df.empty:
                 qna_context = "\n".join(
-                    f"Resume: {row['Filename']}\n{row['LLM Result']}" for _, row in filtered_df.iterrows()
+                    f"Resume: {row['Filename']}\n{row['LLM Analysis']}" for _, row in filtered_df.iterrows()
                 )
                 full_prompt = f"Based on the following analyses:\n\n{qna_context}\n\nQuestion: {question}\nAnswer:"
                 with st.spinner("LLM answering your question..."):
@@ -96,4 +95,4 @@ if st.button("Analyze Resumes"):
 else:
     st.info("Place resumes (PDF/DOCX) in the 'data/resumes/' folder and enter a job description to start analysis.")
 
-st.caption("All results are LLM generated. Results may vary by prompt and candidate pool. © 2025")
+st.caption("All results are LLM generated. Results may vary by prompt, candidate pool, and LLM response quality. © 2025")
