@@ -104,12 +104,15 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
-    <p>Upload PDF/DOCX resumes. Get instant best-match recommendations with confidence levels. Ask HR follow-up questions about all analyses!</p>
+    <p>Upload PDF/DOCX resumes. Get instant best-match recommendations with confidence levels.<br>
+    Ask any follow-up questions in chat mode and build a Q&A history!</p>
 </div>
 """, unsafe_allow_html=True)
 
 if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
+if "qa_history" not in st.session_state:
+    st.session_state.qa_history = []
 
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
@@ -142,6 +145,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
 
     df = pd.DataFrame(results)
     st.session_state["df"] = df
+    st.session_state.qa_history = []       # Clear Q&A on new analysis!
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -161,11 +165,12 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-# ----- HR Q&A about ALL candidate analyses -----
-st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates (ALL Analysis)")
-followup = st.text_input("Type your HR query here...", "")
+# ----- Q&A (Chat Mode with History) -----
+st.markdown("## 🤔 HR Follow-up Q&A (Chat Mode)")
+question = st.text_input("Type your HR question and press Enter...", key="qa_input")
 df = st.session_state["df"]
-if followup and not df.empty:
+
+if question and not df.empty:
     MAX_LEN = 700
     analyses_context = "\n\n".join(
         f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
@@ -174,17 +179,26 @@ if followup and not df.empty:
     q_prompt = (
         "The informations are given below....\n\n"
         f"{analyses_context}\n\n"
-        f"---\n\nQuestion: {followup}\nHR Assistant's answer:"
+        f"---\n\nQuestion: {question}\nHR Assistant's answer:"
     )
-    with st.expander("Show LLM Prompt and Analysis Context (for debugging)"):
-        st.code(q_prompt, language="markdown")
     reply = call_llm(q_prompt)
-    if reply and reply.strip():
-        st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
-    else:
-        st.error("No answer returned. Try a simpler question, use fewer/shorter resumes, or check API/network configuration.")
-elif followup and df.empty:
+    st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
+    st.session_state["qa_input"] = ""    # (Clear box on rerun. Not always needed.)
+    st.experimental_rerun()
+
+elif question and df.empty:
     st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
+
+if st.session_state.qa_history:
+    st.markdown("### 💬 Your Q&A History")
+    for i, (q, a) in enumerate(st.session_state.qa_history):
+        st.markdown(f"**Q{i+1}:** {q}")
+        st.markdown(f"> **A{i+1}:** {a}")
+
+# --- Debug/Show LLM Prompt (optional, hide in expander) ---
+if question and not df.empty:
+    with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
+        st.code(q_prompt, language="markdown")
 
 st.markdown("---")
 if not df.empty:
