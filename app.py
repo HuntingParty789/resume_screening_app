@@ -12,7 +12,6 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
-# --- LLM Helper ---
 def call_llm(prompt):
     if not GROQ_API_KEY:
         st.error("Groq API key missing. Set GROQ_API_KEY!")
@@ -55,7 +54,6 @@ Weaknesses: [1-2 areas for improvement]
 Recommendation: [One clear sentence: Should we hire/interview/pass and why?]
 """
 
-# --- Resume Parsing Helpers ---
 def parse_pdf(file_bytes):
     try:
         reader = PyPDF2.PdfReader(file_bytes)
@@ -84,7 +82,6 @@ def parse_resume(filename, fileobj):
     else:
         return "❌ Unsupported file type. Please upload PDF or DOCX files."
 
-# --- UI Styling ---
 st.set_page_config(page_title="AI Resume Screening Tool", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -160,7 +157,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         """, unsafe_allow_html=True)
 
         st.markdown("## 📊 All Candidates")
-        st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], use_container_width=True)
+        st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
         # --- Q&A ---
         st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates")
