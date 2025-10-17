@@ -7,7 +7,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 def call_llm(prompt):
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     data = {
-        "model": "llama3-70b-8192",  # Example model
+        "model": "openai/gpt-oss-120b",  # Example model
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 512
     }
