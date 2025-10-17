@@ -181,7 +181,14 @@ if st.session_state.qa_history:
         st.markdown(f"> **A{i+1}:** {a}")
 
 # Input box always available; answers immediately and auto-clears
-question = st.text_input("Type your HR question and press Enter...", value="", key="auto_chat", autocomplete="off")
+
+question = st.text_input(
+    "Type your HR question and press Enter...",
+    value=st.session_state.get("auto_chat", ""),
+    key="auto_chat",
+    autocomplete="off"
+)
+
 MAX_LEN = 700
 
 if (
@@ -202,6 +209,8 @@ if (
     st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
     st.session_state.last_asked = question
     st.session_state.last_q_prompt = q_prompt
+    st.session_state["auto_chat"] = ""
+
     
 
 elif question and df.empty:
