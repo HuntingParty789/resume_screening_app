@@ -20,11 +20,11 @@ def call_llm(prompt):
     data = {
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 700,
+        "max_tokens": 800,
         "temperature": 0.1
     }
     try:
-        response = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=45)
+        response = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=60)
         if not response.ok:
             st.error(f"Groq API error {response.status_code}: {response.text}")
             return ""
@@ -104,11 +104,10 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
-    <p>Upload PDF/DOCX resumes. Get instant best-match recommendations with confidence levels. Ask HR follow-up questions!</p>
+    <p>Upload PDF/DOCX resumes. Get instant best-match recommendations with confidence levels. Ask HR follow-up questions about all analyses!</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Session state for results. Set up at top.
 if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
 
@@ -162,33 +161,31 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-# ----- HR Q&A (always available if analysis already run) -----
-st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates")
+# ----- HR Q&A about ALL candidate analyses -----
+st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates (ALL Analysis)")
 followup = st.text_input("Type your HR query here...", "")
 df = st.session_state["df"]
 if followup and not df.empty:
-    best_index = df['Score'].astype(int).idxmax()
-    best_row = df.iloc[best_index]
-    candidate_structured = (
-        f"Filename: {best_row['Filename']}\n"
-        f"Confidence: {best_row['Confidence']}\n"
-        f"Strengths: {best_row['Strengths']}\n"
-        f"Weaknesses: {best_row['Weaknesses']}\n"
-        f"Recommendation: {best_row['Recommendation']}"
+    MAX_LEN = 700
+    analyses_context = "\n\n".join(
+        f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
+        for _, row in df.iterrows()
     )
     q_prompt = (
-        f"You are an expert HR assistant.\n"
-        f"Given this candidate summary:\n\n"
-        f"{candidate_structured}\n\n"
-        f"Answer this HR question:\n{followup}\n"
-        f"Give a clear, direct answer for the HR manager."
+        "You are a professional HR assistant helping a hiring manager. "
+        "Below are AI-generated analyses of multiple candidates for the same job. "
+        "Use all this analysis to answer the question at the end. "
+        "Base your answer only on what is present in the analyses. "
+        "If information isn't available, say so concisely.\n\n"
+        f"{analyses_context}\n\n"
+        f"---\n\nQuestion: {followup}\nHR Assistant's answer:"
     )
     st.code(q_prompt, language="markdown")
     reply = call_llm(q_prompt)
     if reply and reply.strip():
         st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
     else:
-        st.error("No answer returned. Try a simpler question, run with fewer resumes, or check API/network configuration.")
+        st.error("No answer returned. Try a simpler question, use fewer/shorter resumes, or check API/network configuration.")
 elif followup and df.empty:
     st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
