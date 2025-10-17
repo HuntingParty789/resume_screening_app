@@ -5,3 +5,4 @@ spacy
 requests
 python-dotenv
 tabulate
+pandas
