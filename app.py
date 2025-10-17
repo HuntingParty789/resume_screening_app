@@ -176,7 +176,8 @@ if followup and not df.empty:
         f"{analyses_context}\n\n"
         f"---\n\nQuestion: {followup}\nHR Assistant's answer:"
     )
-    st.code(q_prompt, language="markdown")
+    with st.expander("Show LLM Prompt and Analysis Context (for debugging)"):
+        st.code(q_prompt, language="markdown")
     reply = call_llm(q_prompt)
     if reply and reply.strip():
         st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
