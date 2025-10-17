@@ -10,7 +10,7 @@ import os
 # Groq setup
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
-GROQ_MODEL = "meta-llama/llama-guard-4-12b"
+GROQ_MODEL = "groq/compound"
 
 def call_llm(prompt):
     if not GROQ_API_KEY:
