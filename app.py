@@ -7,7 +7,7 @@ from parsing.resume_parser import batch_parse_resumes
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "openai/gpt-oss-120b"  # Use a valid Groq model
+GROQ_MODEL = "openai/gpt-oss-120b"
 
 def call_llm(prompt):
     if not GROQ_API_KEY:
@@ -32,6 +32,14 @@ def call_llm(prompt):
         st.error(f"LLM call failed: {e}")
         return ""
 
+def score_to_confidence(score):
+    if score >= 80:
+        return "High"
+    elif score >= 60:
+        return "Medium"
+    else:
+        return "Low"
+
 def build_candidate_prompt(jd, resume_text):
     return (
         f"You are an expert HR AI assistant.\n"
@@ -44,7 +52,7 @@ def build_candidate_prompt(jd, resume_text):
         f"Output in this format: score: xx Strengths: ... Weaknesses: ... Recommendation: ..."
     )
 
-st.title("Best-fit HR LLM Candidate Recommendations")
+st.title("Best-fit Candidate Confidence Recommendations")
 
 job_desc = st.text_area("Paste your job description", height=140)
 if st.button("Analyze Resumes"):
@@ -58,6 +66,7 @@ if st.button("Analyze Resumes"):
             llm_result = call_llm(prompt)
             score_match = re.search(r"score\s*[:=\-]*\s*(\d+)", llm_result or "", re.I)
             score = int(score_match.group(1)) if score_match else 0
+            confidence = score_to_confidence(score)
             strengths, weaknesses, recommendation = "", "", ""
             try:
                 strengths = re.search(r"Strengths:\s*(.*?)(Weaknesses:|Recommendation:|$)", llm_result, re.S).group(1).strip()
@@ -67,28 +76,28 @@ if st.button("Analyze Resumes"):
                 pass
             results.append({
                 "Filename": res['filename'],
-                "Score": score,
+                "Confidence": confidence,
                 "Strengths": strengths,
                 "Weaknesses": weaknesses,
                 "Recommendation": recommendation
             })
 
         df = pd.DataFrame(results)
-        top_df = df.sort_values("Score", ascending=False).head(1)
+        top_df = df.sort_values("Confidence", ascending=False).head(1)   # Highest (High>Medium>Low)
         st.header("Most Suitable Candidate Recommendation")
         for _, row in top_df.iterrows():
             st.subheader(row['Filename'])
-            st.markdown(f"**Fit Score:** {row['Score']}")
+            st.markdown(f"**Confidence Level:** {row['Confidence']}")
             st.markdown(f"**Strengths:** {row['Strengths']}")
             st.markdown(f"**Weaknesses:** {row['Weaknesses']}")
             st.markdown(f"**Recommendation:** {row['Recommendation']}")
 
-        st.header("All Candidates Ranked")
-        st.dataframe(df.sort_values("Score", ascending=False), use_container_width=True)
+        st.header("All Candidates, Ranked by Confidence")
+        st.dataframe(df, use_container_width=True)
         csv = df.to_csv(index=False)
         st.download_button("Download Results (CSV)", csv, file_name="candidate_recommendations.csv")
 
 else:
     st.info("Paste a job description, add resumes, and click 'Analyze Resumes'.")
 
-st.caption("LLM-powered candidate recommendations (fit score, strengths, weaknesses, clear hiring advice).")
+st.caption("LLM-powered best-fit candidate recommendations (confidence, strengths, weaknesses, hiring advice).")
