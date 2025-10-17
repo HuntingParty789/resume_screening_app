@@ -83,7 +83,6 @@ def parse_resume(filename, fileobj):
         return "❌ Unsupported file type. Please upload PDF or DOCX files."
 
 st.set_page_config(page_title="AI Resume Screening Tool", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
-
 st.markdown("""
 <style>
 .main-header { text-align: center; margin: 0 0 2em 0; }
@@ -114,7 +113,6 @@ uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)"
 results = []
 
 if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.strip())):
-    # Parse and analyze all uploaded resumes
     for file in uploaded_files:
         text = parse_resume(file.name, file)
         prompt = build_candidate_prompt(job_desc, text)
@@ -163,20 +161,20 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 🤔 HR Follow-up: Ask a Question about These Candidates")
         followup = st.text_input("Type your HR query here...", "")
         if followup:
-            # Pass at most 3 analyses, each truncated for token efficiency
-            MAX_CANDIDATES_QA = 3
-            MAX_ANALYSIS_LENGTH = 700
-            results_to_pass = df.sort_values("Score", ascending=False).head(MAX_CANDIDATES_QA)
-            context = "\n\n".join(
-                f"Candidate: {row['Filename']}\n{str(row['Raw'])[:MAX_ANALYSIS_LENGTH]}"
-                for _, row in results_to_pass.iterrows()
+            top_candidate = df.sort_values("Score", ascending=False).iloc[0]
+            context = f"Candidate: {top_candidate['Filename']}\n{str(top_candidate['Raw'])[:700]}"
+            q_prompt = (
+                f"You are an HR assistant. Based on this candidate analysis:\n\n"
+                f"{context}\n\n"
+                f"Now answer this question, clearly and professionally:\n{followup}\n\n"
+                f"Your response:"
             )
-            q_prompt = f"""You are HR assistant. Based on these analyses:\n{context}\n\nAnswer this HR question:\n{followup}\nYour response:"""
             reply = call_llm(q_prompt)
-            if reply:
+            if reply and reply.strip():
                 st.markdown(f"**HR Assistant's Answer:**\n\n{reply}")
             else:
-                st.error("No answer returned. Try a shorter question or fewer resumes.")
+                st.error("No answer returned. Try a simpler, shorter question or analyze fewer resumes.")
+                st.code(q_prompt, language="markdown")  # Show the LLM prompt for debugging
 
         st.markdown("---")
         csv = df.drop(columns=["Raw"]).to_csv(index=False)
