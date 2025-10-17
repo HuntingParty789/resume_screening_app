@@ -105,7 +105,7 @@ st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
     <p>Upload PDF/DOCX resumes. Get best-match recommendations.<br>
-    Type follow-up questions and see chat history instantly. Box doesn't auto-clear.</p>
+    Ask follow-up Qs using chat. <strong>Chat input always clears and answers show instantly!</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -113,8 +113,6 @@ if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
 if "qa_history" not in st.session_state:
     st.session_state.qa_history = []
-if "last_q_prompt" not in st.session_state:
-    st.session_state["last_q_prompt"] = ""
 
 job_desc = st.text_area("📋 Job Description", height=150, placeholder="Paste the job description here...")
 uploaded_files = st.file_uploader("📎 Upload Candidate Resumes (.pdf / .docx)", type=["pdf", "docx"], accept_multiple_files=True)
@@ -148,7 +146,6 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
     df = pd.DataFrame(results)
     st.session_state["df"] = df
     st.session_state.qa_history = []
-    st.session_state["last_q_prompt"] = ""
     if df.empty or df.Score.max() == 0:
         st.error("No valid resume analysis was generated. Check your resumes and connection/API key.")
     else:
@@ -168,7 +165,8 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
         st.markdown("## 📊 All Candidates")
         st.dataframe(df[['Filename', 'Confidence', 'Strengths', 'Weaknesses', 'Recommendation']], width="stretch")
 
-st.markdown("## 🤔 HR Follow-up Q&A (No Button, No Rerun Mode)")
+# --------- CHAT Q&A WITH INSTANT ANSWER AND INSTANT CLEAR ----------
+st.markdown("## 🤔 HR Follow-up Q&A (Instant Chat Mode)")
 
 df = st.session_state["df"]
 
@@ -178,14 +176,11 @@ if st.session_state.qa_history:
         st.markdown(f"**Q{i+1}:** {q}")
         st.markdown(f"> **A{i+1}:** {a}")
 
-question = st.text_input("Type your HR question and press Enter...", value="", key="auto_chat", autocomplete="off")
-MAX_LEN = 700
-
-if question.strip() and not df.empty:
-    if (
-        not st.session_state.qa_history
-        or question != st.session_state.qa_history[-1][0]
-    ):
+with st.form("chatbox_form", clear_on_submit=True):
+    question = st.text_input("Type your HR question and press Enter (or click Ask)...", key="chatbox_input", autocomplete="off")
+    send = st.form_submit_button("Ask")
+    if send and question and not df.empty:
+        MAX_LEN = 700
         analyses_context = "\n\n".join(
             f"Candidate {row['Filename']} analysis:\n{str(row['Raw'])[:MAX_LEN]}"
             for _, row in df.iterrows()
@@ -199,11 +194,12 @@ if question.strip() and not df.empty:
         st.session_state.qa_history.append((question, reply if reply and reply.strip() else "**No answer returned or error.**"))
         st.session_state["last_q_prompt"] = q_prompt
 
-elif question and df.empty:
-    st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
+    elif send and not df.empty and not question:
+        st.warning("Please enter a question to ask.")
+    elif send and df.empty:
+        st.warning("No candidate analyses found. Please run 'Analyze Resumes' first.")
 
-# Debug block: ONLY show q_prompt if available
-if st.session_state.qa_history and st.session_state["last_q_prompt"]:
+if st.session_state.qa_history and "last_q_prompt" in st.session_state:
     with st.expander("Show Last LLM Prompt and Analysis Context (debug only)"):
         st.code(st.session_state["last_q_prompt"], language="markdown")
 
