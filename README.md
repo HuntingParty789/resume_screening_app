@@ -92,4 +92,4 @@ Upload resumes: PDF/DOCX, one or many.
 
 --> Credits
 
-Project by [Your Name]. Powered by Groq, Streamlit, and open-source libraries.
+Project by Vidyanshu Kumar Sinha. Powered by Groq, Streamlit, and open-source libraries.
