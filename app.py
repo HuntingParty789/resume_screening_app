@@ -105,7 +105,7 @@ st.markdown("""
 <div class="main-header">
     <h1>🎯 AI-Powered Resume Screening Tool</h1>
     <p>Upload PDF/DOCX resumes. Get best-match recommendations.<br>
-    Ask follow-up questions in chat mode. <strong>Instant answer, box always clears, no lag!</strong></p>
+    
 </div>
 """, unsafe_allow_html=True)
 
