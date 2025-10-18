@@ -170,7 +170,7 @@ if st.button("🚀 Analyze Resumes", disabled=not (uploaded_files and job_desc.s
 
 df = st.session_state["df"]
 
-st.markdown("## 🤔 HR Follow-up Q&A (Chat Mode - Instant)")
+st.markdown("## 🤔 HR Follow-up Q&A")
 
 with st.form("chatbox_form", clear_on_submit=True):
     question = st.text_input("Type your HR question…", key="chatbox_input", autocomplete="off")
